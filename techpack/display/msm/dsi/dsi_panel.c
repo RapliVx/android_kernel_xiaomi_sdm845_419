@@ -5849,7 +5849,6 @@ static int parse_to_dcs_cmds(struct dsi_panel_cmd_set *on_cmd_sets)
 	struct file *filp = NULL;
 	const char *file_name = "/data/lcd.txt";
 	int file_size = 0;
-	loff_t pos;
 
 	filp = filp_open(file_name, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
@@ -5871,8 +5870,7 @@ static int parse_to_dcs_cmds(struct dsi_panel_cmd_set *on_cmd_sets)
 		return -ENOMEM;
 	}
 
-	pos = filp->f_pos;
-	ret = kernel_read(filp, data, file_size, &pos);
+	ret = kernel_read(filp, filp->f_pos, data, file_size);
 	if (ret < 0) {
 		pr_err("[LCD]%s read failed, return %d\n", file_name, ret);
 		goto exit_free;
