@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (C) 2019 XiaoMi, Inc.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -217,6 +218,15 @@ static void _sde_core_perf_calc_crtc(struct sde_kms *kms,
 		perf->core_clk_rate = max(kms->perf.fix_core_clk_rate,
 						perf->core_clk_rate);
 	}
+	
+	trace_sde_perf_calc_crtc(crtc->base.id,
+			perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_MNOC],
+			perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_LLCC],
+			perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_EBI],
+			perf->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_MNOC],
+			perf->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_LLCC],
+			perf->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_EBI],
+			perf->core_clk_rate);
 
 	SDE_EVT32(DRMID(crtc), perf->core_clk_rate,
 		GET_H32(perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_MNOC]),
@@ -852,6 +862,12 @@ static void _sde_core_perf_crtc_update_check(struct drm_crtc *crtc,
 		*update_llcc = 1;
 	}
 
+	trace_printk("crtc:%d ib_mnoc:%llu ib_llc:%llu ib_ebi:%llu\n",
+		crtc->base.id,
+		new->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_MNOC],
+		new->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_LLCC],
+		new->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_EBI]);
+
 	for (i = 0; i < SDE_POWER_HANDLE_DBUS_ID_MAX; i++) {
 		/*
 		 * cases for bus bandwidth update.
@@ -1018,6 +1034,7 @@ void sde_core_perf_crtc_update(struct drm_crtc *crtc,
 
 		SDE_EVT32(kms->dev, stop_req, clk_rate, params_changed,
 			old->core_clk_rate, new->core_clk_rate);
+
 		ret = sde_power_clk_set_rate(&priv->phandle,
 				kms->perf.clk_name, clk_rate);
 		if (ret) {

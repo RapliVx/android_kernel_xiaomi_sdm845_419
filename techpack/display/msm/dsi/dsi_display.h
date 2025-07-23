@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2019 XiaoMi, Inc.
  */
 
 #ifndef _DSI_DISPLAY_H_
@@ -196,6 +197,8 @@ struct dsi_display {
 	struct drm_connector *ext_conn;
 
 	const char *name;
+	bool is_prim_display;
+	bool is_first_boot;
 	const char *display_type;
 	struct list_head list;
 	bool is_cont_splash_enabled;
@@ -611,6 +614,8 @@ int dsi_dispaly_static_frame(struct dsi_display *display, bool enable);
  * Return: drm_panel/NULL.
  */
 struct drm_panel *dsi_display_get_drm_panel(struct dsi_display *display);
+
+int dsi_panel_set_doze_backlight(struct dsi_display *display, u32 bl_lvl);
 
 /**
  * dsi_display_enable_event() - enable interrupt based connector event

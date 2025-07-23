@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (C) 2019 XiaoMi, Inc.
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ *
  */
 
 #ifndef _SDE_CONNECTOR_H_
@@ -485,6 +487,7 @@ struct sde_connector {
 	bool colorspace_updated;
 
 	bool last_cmd_tx_sts;
+	bool panel_dead_skip;
 	bool hdr_capable;
 };
 

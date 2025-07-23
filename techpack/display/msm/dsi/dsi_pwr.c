@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2019 XiaoMi, Inc.
  */
+
+// duckyduck: add changes if needed after testing, FIXME
 
 #include <linux/of.h>
 #include <linux/delay.h>

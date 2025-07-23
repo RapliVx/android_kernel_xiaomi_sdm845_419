@@ -73,6 +73,9 @@ struct msm_gem_vma;
 
 #define TEARDOWN_DEADLOCK_RETRY_MAX 5
 
+extern atomic_t resume_pending;
+extern wait_queue_head_t resume_wait_q;
+
 struct msm_file_private {
 	rwlock_t queuelock;
 	struct list_head submitqueues;
@@ -589,6 +592,15 @@ struct msm_drm_thread {
 	struct task_struct *thread;
 	unsigned int crtc_id;
 	struct kthread_worker worker;
+};
+
+struct msm_idle {
+	u32 timeout_ms;
+	u32 encoder_mask;
+	u32 active_mask;
+
+	spinlock_t lock;
+	struct delayed_work work;
 };
 
 struct msm_idle {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (C) 2019 XiaoMi, Inc.
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -376,7 +377,8 @@ static void sde_hw_sspp_setup_format(struct sde_hw_pipe *ctx,
 				alpha_en_mask | (ctx->mdp->ubwc_swizzle & 0x1) |
 				BIT(8) | (ctx->mdp->highest_bank_bit << 4));
 		} else if (IS_UBWC_20_SUPPORTED(ctx->catalog->ubwc_version)) {
-			alpha_en_mask = const_alpha_en ? BIT(31) : 0;
+			/* xiaomi change */
+			// alpha_en_mask = const_alpha_en ? BIT(31) : 0;
 			SDE_REG_WRITE(c, SSPP_UBWC_STATIC_CTRL,
 				alpha_en_mask | (ctx->mdp->ubwc_swizzle) |
 				(ctx->mdp->highest_bank_bit << 4));
