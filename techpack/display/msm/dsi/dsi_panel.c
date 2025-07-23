@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (C) 2019 XiaoMi, Inc.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (C) 2019 XiaoMi, Inc.
+ *
  */
 
 #include <linux/delay.h>
@@ -10,6 +11,7 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/pwm.h>
+#include <linux/leds.h>
 #include <video/mipi_display.h>
 
 #include "dsi_panel.h"
@@ -392,7 +394,7 @@ static int dsi_panel_gpio_release(struct dsi_panel *panel)
  void drm_dsi_ulps_enable(bool enable)
 {
 	if (g_panel) {
-		g_panel->ulps_enabled = enable;
+		g_panel->ulps_feature_enabled = enable;
 		g_panel->ulps_suspend_enabled = enable;
 	}
 }
@@ -736,7 +738,7 @@ static int dsi_panel_wled_register(struct dsi_panel *panel,
 	bl->raw_bd = bd;
 	return 0;
 }
-
+/*
 static int dsi_panel_dcs_set_display_brightness_c2(struct mipi_dsi_device *dsi,
 			u32 bl_lvl)
 {
@@ -750,9 +752,7 @@ static int dsi_panel_dcs_set_display_brightness_c2(struct mipi_dsi_device *dsi,
 
 	return mipi_dsi_dcs_write(dsi, 0xC2, payload, sizeof(payload));
 }
-
-
-
+*/
 enum {
 	DDIC_VER_0,
 	DDIC_VER_1 = 0x01,
@@ -2717,6 +2717,7 @@ static int dsi_panel_parse_power_cfg(struct dsi_panel *panel)
 {
 	int rc = 0;
 	char *supply_name;
+	struct dsi_parser_utils *utils = &panel->utils;
 
 	if (panel->host_config.ext_bridge_mode)
 		return 0;
@@ -2726,7 +2727,7 @@ static int dsi_panel_parse_power_cfg(struct dsi_panel *panel)
 	else
 		supply_name = "qcom,panel-sec-supply-entries";
 	
-	panel->lp11_init = of_property_read_bool(of_node,
+	panel->lp11_init = utils->read_bool(utils->data,
 				"qcom,mdss-dsi-lp11-init");
 	pr_info("%s: lp11_init = %d\n", __func__, panel->lp11_init);
 
@@ -2876,7 +2877,7 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 		panel->bl_config.type = DSI_BACKLIGHT_UNKNOWN;
 	}
 	
-	panel->bl_config.dcs_type_ss = of_property_read_bool(of_node,
+	panel->bl_config.dcs_type_ss = utils->read_bool(utils->data,
 						"qcom,mdss-dsi-bl-dcs-type-ss");
 
 	data = utils->get_property(utils->data, "qcom,bl-update-flag", NULL);
@@ -2890,7 +2891,7 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 		panel->bl_config.bl_update = BL_UPDATE_NONE;
 	}
 	
-	rc = of_property_read_u32(of_node, "qcom,bl-update-delay", &val);
+	rc = of_property_read_u32(utils->data, "qcom,bl-update-delay", &val);
 	if (rc) {
 		pr_debug("[%s] bl-update-delay unspecified, defaulting to zero\n",
 			 panel->name);
@@ -2902,10 +2903,10 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 	panel->bl_config.bl_scale = MAX_BL_SCALE_LEVEL;
 	panel->bl_config.bl_scale_sv = MAX_SV_BL_SCALE_LEVEL;
 	
-	panel->bl_config.dcs_type_ss = of_property_read_bool(of_node,
+	panel->bl_config.dcs_type_ss = utils->read_bool(utils->data,
 						"qcom,mdss-dsi-bl-dcs-type-ss");
 
-	rc = of_property_read_u32(of_node, "qcom,bl-update-delay", &val);
+	rc = of_property_read_u32(utils->data, "qcom,bl-update-delay", &val);
 	if (rc) {
 		pr_debug("[%s] bl-update-delay unspecified, defaulting to zero\n",
 			 panel->name);
@@ -2931,8 +2932,8 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 	} else {
 		panel->bl_config.bl_max_level = val;
 	}
-	
-	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-typical-level", &val);
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-typical-level", &val);
 	if (rc) {
 		pr_debug("[%s] bl-typical-level unspecified, defaulting to bl-min-level\n",
 			 panel->name);
@@ -2941,11 +2942,11 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 		panel->bl_config.bl_typical_level = val;
 	}
 
-	panel->bl_config.bl_remap_flag = of_property_read_bool(of_node,
+	panel->bl_config.bl_remap_flag = utils->read_bool(utils->data,
 						"qcom,mdss-brightness-remap");
 
-	panel->bl_config.doze_brightness_varible_flag = of_property_read_bool(of_node,
-						"qcom,mdss-doze-brightness-variable");
+	panel->bl_config.doze_brightness_varible_flag = utils->read_u32(utils->data,
+						"qcom,mdss-doze-brightness-variable", &val);
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-brightness-max-level",
 		&val);
@@ -3842,7 +3843,7 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 
 	/* esd-err-flag method will be prefered */
 	esd_config->esd_err_irq_gpio = of_get_named_gpio_flags(
-			of_node,
+			panel->panel_of_node,
 			"qcom,esd-err-irq-gpio",
 			0,
 			(enum of_gpio_flags *)&(esd_config->esd_err_irq_flags));
@@ -4110,7 +4111,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	
 	rc = dsi_panel_parse_mi_config(panel, of_node);
 	if (rc)
-		pr_err("failed to parse mi config, rc=%d\n", rc);
+		DSI_ERR("failed to parse mi config, rc=%d\n", rc);
 
 	panel->panel_of_node = of_node;
 	panel->hist_bl_offset = 0;
@@ -5164,7 +5165,9 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 			pr_err("[%s] failed to reset panel, rc=%d\n", panel->name, rc);
 			goto error;
 			}
+#if 0
 		}
+#endif
 	}
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PRE_ON);
@@ -5844,6 +5847,7 @@ static int parse_to_dcs_cmds(struct dsi_panel_cmd_set *on_cmd_sets)
 	struct file *filp = NULL;
 	const char *file_name = "/data/lcd.txt";
 	int file_size = 0;
+	loff_t pos;
 
 	filp = filp_open(file_name, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
@@ -5865,7 +5869,8 @@ static int parse_to_dcs_cmds(struct dsi_panel_cmd_set *on_cmd_sets)
 		return -ENOMEM;
 	}
 
-	ret = kernel_read(filp, filp->f_pos, data, file_size);
+	pos = filp->f_pos;
+	ret = kernel_read(filp, data, file_size, &pos);
 	if (ret < 0) {
 		pr_err("[LCD]%s read failed, return %d\n", file_name, ret);
 		goto exit_free;

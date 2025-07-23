@@ -603,15 +603,6 @@ struct msm_idle {
 	struct delayed_work work;
 };
 
-struct msm_idle {
-	u32 timeout_ms;
-	u32 encoder_mask;
-	u32 active_mask;
-
-	spinlock_t lock;
-	struct delayed_work work;
-};
-
 struct msm_drm_private {
 
 	struct drm_device *dev;

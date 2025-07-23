@@ -3648,8 +3648,8 @@ static int _sde_kms_hw_init_blocks(struct sde_kms *sde_kms,
 		goto power_error;
 	}
 	// duckyduck: xiaomi change - not sure
-	/* Initialize reg dma block which is a singleton */
-	/*rc = sde_reg_dma_init(sde_kms->reg_dma, sde_kms->catalog,
+	// Initialize reg dma block which is a singleton
+	// rc = sde_reg_dma_init(sde_kms->reg_dma, sde_kms->catalog,
 			sde_kms->dev);
 	if (rc) {
 		SDE_ERROR("failed: reg dma init failed\n");

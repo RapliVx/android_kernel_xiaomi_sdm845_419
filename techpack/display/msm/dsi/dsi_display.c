@@ -47,6 +47,7 @@ static const struct of_device_id dsi_display_dt_match[] = {
 	{}
 };
 
+struct dsi_display *primary_display;
 const char *dsi_get_display_name(void)
 {
 	if (primary_display)
@@ -954,7 +955,7 @@ int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read
 	cmds->msg.rx_buf = read_config->rbuf;
 	cmds->msg.rx_len = read_config->cmds_rlen;
 
-	rc = dsi_ctrl_cmd_transfer(ctrl->ctrl, &(cmds->msg), flags);
+	rc = dsi_ctrl_cmd_transfer(ctrl->ctrl, &(cmds->msg), &flags);
 	if (rc <= 0) {
 		pr_err("rx cmd transfer failed rc=%d\n", rc);
 		goto exit;
@@ -1283,8 +1284,11 @@ int dsi_display_set_power(struct drm_connector *connector,
 	case SDE_MODE_DPMS_ON: // FIXME
 		if ((display->panel->power_mode == SDE_MODE_DPMS_LP1) ||
 			(display->panel->power_mode == SDE_MODE_DPMS_LP2)) {
-		if (dev->pre_state != SDE_MODE_DPMS_LP1 &&
-					dev->pre_state != SDE_MODE_DPMS_LP2)
+
+			if (dev->pre_state != SDE_MODE_DPMS_LP1 &&
+					dev->pre_state != SDE_MODE_DPMS_LP2) {
+			break;
+			}
 			drm_notifier_call_chain(DRM_EARLY_EVENT_BLANK, &g_notify_data);
 			rc = dsi_panel_set_nolp(display->panel);
 			drm_notifier_call_chain(DRM_EVENT_BLANK, &g_notify_data);
@@ -1299,9 +1303,10 @@ int dsi_display_set_power(struct drm_connector *connector,
 	DSI_DEBUG("Power mode transition from %d to %d %s",
 			display->panel->power_mode, power_mode,
 			rc ? "failed" : "successful");
-	if (!rc)
+	if (!rc) {
 		display->panel->power_mode = power_mode;
 		dev->pre_state = power_mode;
+	}
 
 	return rc;
 }
@@ -5789,8 +5794,6 @@ int dsi_display_drm_bridge_init(struct dsi_display *display,
 
 	display->bridge = bridge;
 	priv->bridges[priv->num_bridges++] = &bridge->base;
-
-	g_notify_data.is_primary = info->is_primary;
 
 error:
 	mutex_unlock(&display->display_lock);
