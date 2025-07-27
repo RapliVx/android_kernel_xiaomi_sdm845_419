@@ -595,11 +595,9 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 	
-	// FIXME: this is removed in xiaomi changes for dt2w, not sure, But vayu
-	// changes work fine with tiddi function, maybe i'll import that.
-	/* if (gpio_is_valid(panel->reset_config.reset_gpio) &&
+	if (gpio_is_valid(panel->reset_config.reset_gpio) &&
 					!panel->reset_gpio_always_on)
-		gpio_set_value(panel->reset_config.reset_gpio, 0); */
+		gpio_set_value(panel->reset_config.reset_gpio, 0);
 
 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		gpio_set_value(panel->reset_config.lcd_mode_sel_gpio, 0);
@@ -807,12 +805,11 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	if (panel->bl_config.bl_inverted_dbv)
 		bl_lvl = (((bl_lvl & 0xff) << 8) | (bl_lvl >> 8));
 
-	// FIXME: this is removed in xiaomi changes for dt2w, not sure, But vayu
-	// changes work fine with tiddi function, maybe i'll import that.
-	/*if (panel->bl_config.bl_dcs_subtype == 0xc2)
+	if (panel->bl_config.bl_dcs_subtype == 0xc2)
 		rc = dsi_panel_dcs_set_display_brightness_c2(dsi, bl_lvl);
 	else
-		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);*/
+		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
+
 	if (panel->bl_config.dcs_type_ss) {
 		if (panel->bl_config.ss_panel_id == DDIC_VER_1)
 			bl_lvl = do_night_bright_map(panel, bl_lvl);
@@ -852,7 +849,7 @@ static void dsi_panel_offon_mode_control(struct dsi_panel *panel, u32 bl_lvl)
 	if (bl_lvl == 0) {
 		if (panel->last_bl_lvl != 0) {
 			if (!panel->dsi_panel_off_mode) {
-				pr_debug("%s: set display off when bl_level=0\n", __func__);
+				DSI_DEBUG("%s: set display off when bl_level=0\n", __func__);
 				panel->dsi_panel_off_mode = true;
 
 				if (panel->disable_cabc) {
@@ -870,7 +867,7 @@ static void dsi_panel_offon_mode_control(struct dsi_panel *panel, u32 bl_lvl)
 				}
 
 				set_skip_panel_dead(true);
-				pr_debug("%s: set set_skip_panel_dead = true \n", __func__);
+				DSI_DEBUG("%s: set set_skip_panel_dead = true \n", __func__);
 				panel_disp_param_send_lock(panel, DISPLAY_OFF_MODE);
 
 				if (panel->disable_cabc)
@@ -879,11 +876,11 @@ static void dsi_panel_offon_mode_control(struct dsi_panel *panel, u32 bl_lvl)
 		}
 	} else {
 		if (panel->last_bl_lvl == 0 && panel->dsi_panel_off_mode == true) {
-			pr_debug("%s: set display on when last_bl_lvl=0\n", __func__);
+			DSI_DEBUG("%s: set display on when last_bl_lvl=0\n", __func__);
 			panel->dsi_panel_off_mode = false;
 
 			set_skip_panel_dead(false);
-			pr_debug("%s: set set_skip_panel_dead = false \n", __func__);
+			DSI_DEBUG("%s: set set_skip_panel_dead = false \n", __func__);
 			panel_disp_param_send_lock(panel, DISPLAY_ON_MODE);
 		}
 	}
@@ -1021,7 +1018,7 @@ int dsi_panel_enable_doze_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	u32 bl_temp;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
-	pr_debug("enable doze backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+	DSI_DEBUG("enable doze backlight type:%d lvl:%d\n", bl->type, bl_lvl);
 
 	mutex_lock(&panel->panel_lock);
 
@@ -1133,7 +1130,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		bl_temp = bl_lvl;
 	}
 
-	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_temp);
+	DSI_DEBUG("backlight type:%d lvl:%d\n", bl->type, bl_temp);
 	if (panel->dc_enable && bl_temp < panel->dc_threshold && bl_temp != 0) {
 		pr_info("skip set backlight bacase dc enable %d, bl %d, last_bl %d\n", panel->dc_enable, bl_temp, panel->last_bl_lvl);
 		mutex_unlock(&panel->panel_lock);
@@ -2876,9 +2873,6 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 			 panel->name, bl_type);
 		panel->bl_config.type = DSI_BACKLIGHT_UNKNOWN;
 	}
-	
-	panel->bl_config.dcs_type_ss = utils->read_bool(utils->data,
-						"qcom,mdss-dsi-bl-dcs-type-ss");
 
 	data = utils->get_property(utils->data, "qcom,bl-update-flag", NULL);
 	if (!data) {
@@ -2890,15 +2884,6 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 						panel->name, data);
 		panel->bl_config.bl_update = BL_UPDATE_NONE;
 	}
-	
-	rc = of_property_read_u32(utils->data, "qcom,bl-update-delay", &val);
-	if (rc) {
-		pr_debug("[%s] bl-update-delay unspecified, defaulting to zero\n",
-			 panel->name);
-		panel->bl_config.bl_update_delay = 0;
-	} else {
-		panel->bl_config.bl_update_delay = val;
-	}
 
 	panel->bl_config.bl_scale = MAX_BL_SCALE_LEVEL;
 	panel->bl_config.bl_scale_sv = MAX_SV_BL_SCALE_LEVEL;
@@ -2908,7 +2893,7 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	rc = of_property_read_u32(utils->data, "qcom,bl-update-delay", &val);
 	if (rc) {
-		pr_debug("[%s] bl-update-delay unspecified, defaulting to zero\n",
+		DSI_DEBUG("[%s] bl-update-delay unspecified, defaulting to zero\n",
 			 panel->name);
 		panel->bl_config.bl_update_delay = 0;
 	} else {
@@ -2935,7 +2920,7 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-typical-level", &val);
 	if (rc) {
-		pr_debug("[%s] bl-typical-level unspecified, defaulting to bl-min-level\n",
+		DSI_DEBUG("[%s] bl-typical-level unspecified, defaulting to bl-min-level\n",
 			 panel->name);
 		panel->bl_config.bl_typical_level = panel->bl_config.bl_min_level;
 	} else {
@@ -4259,7 +4244,7 @@ static int dsi_display_write_panel(struct dsi_panel *panel,
 	state = cmd_sets->state;
 
 	if (count == 0) {
-		pr_debug("[%s] No commands to be sent for state\n",
+		DSI_DEBUG("[%s] No commands to be sent for state\n",
 			 panel->name);
 		goto error;
 	}
@@ -4370,7 +4355,7 @@ ssize_t mipi_reg_write(char *buf, size_t count)
 		}
 	}
 
-	pr_debug("[%s]: mipi_procfs_write done!\n", panel->name);
+	DSI_DEBUG("[%s]: mipi_procfs_write done!\n", panel->name);
 	retval = count;
 
 exit_free3:
@@ -4433,7 +4418,7 @@ static ssize_t mipi_reg_procfs_write(struct file *file, const char __user *buf,
 		goto end;
 	}
 	input[count-1] = '\0';
-	pr_debug("copy_from_user input: %s\n", input);
+	DSI_DEBUG("copy_from_user input: %s\n", input);
 
 	retval = mipi_reg_write(input, count);
 end:
@@ -5460,7 +5445,7 @@ static int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 		return rc;
 	}
 
-	pr_debug("[LCD] param_type=%d\n", param);
+	DSI_DEBUG("[LCD] param_type=%d\n", param);
 
 	if (param & 0x1000000) {
 		panel->hist_bl_offset = (param & 0x0FF);
@@ -5827,7 +5812,7 @@ static int string_merge_into_buf(const char *str, int len, char *buf)
 			(p[0] <= 'F' && p[0] >= 'A'))
 			&& ((i + 1) < len)) {
 			buf[buf_size] = string_to_hex(p);
-			pr_debug("0x%02x ", buf[buf_size]);
+			DSI_DEBUG("0x%02x ", buf[buf_size]);
 			buf_size++;
 			i += 2;
 			p += 2;
@@ -6044,7 +6029,7 @@ int dsi_panel_enable(struct dsi_panel *panel)
 
 	if (panel->onoff_mode_enabled) {
 		set_skip_panel_dead(false);
-		pr_debug("%s: set set_skip_panel_dead = false \n", __func__);
+		DSI_DEBUG("%s: set set_skip_panel_dead = false \n", __func__);
 	}
 
 	return rc;

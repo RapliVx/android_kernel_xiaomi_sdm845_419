@@ -246,17 +246,17 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	if (drm_dev && drm_dev->doze_state == DRM_BLANK_LP1) {
 		rc = dsi_panel_set_doze_backlight(display, (u32)bl_temp);
 		if (rc)
-			pr_err("unable to set doze backlight\n");
+			DSI_ERR("unable to set doze backlight\n");
 		rc = dsi_panel_enable_doze_backlight(panel, (u32)bl_temp);
 		if (rc)
-			pr_err("unable to enable doze backlight\n");
+			DSI_ERR("unable to enable doze backlight\n");
 	} else if (drm_dev && drm_dev->doze_state == DRM_BLANK_LP2) {
-		pr_err("unable to set doze backlight in LP2 state:%u\n", (u32)bl_temp);
+		DSI_ERR("unable to set doze backlight in LP2 state:%u\n", (u32)bl_temp);
 	} else {
 		drm_dev->doze_brightness = DOZE_BRIGHTNESS_INVALID;
 		rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
 		if (rc)
-			pr_err("unable to set backlight\n");
+			DSI_ERR("unable to set backlight\n");
 	}
 
 	rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
@@ -930,7 +930,7 @@ int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read
 
 	rc = dsi_display_cmd_engine_enable(display);
 	if (rc) {
-		pr_err("cmd engine enable failed\n");
+		DSI_ERR("cmd engine enable failed\n");
 		rc = -EPERM;
 		goto exit_ctrl;
 	}
@@ -938,7 +938,7 @@ int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read
 	if (display->tx_cmd_buf == NULL) {
 		rc = dsi_host_alloc_cmd_tx_buffer(display);
 		if (rc) {
-			pr_err("failed to allocate cmd tx buffer memory\n");
+			DSI_ERR("failed to allocate cmd tx buffer memory\n");
 			goto exit;
 		}
 	}
@@ -957,7 +957,7 @@ int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read
 
 	rc = dsi_ctrl_cmd_transfer(ctrl->ctrl, &(cmds->msg), &flags);
 	if (rc <= 0) {
-		pr_err("rx cmd transfer failed rc=%d\n", rc);
+		DSI_ERR("rx cmd transfer failed rc=%d\n", rc);
 		goto exit;
 	}
 
@@ -1049,7 +1049,7 @@ int dsi_display_read_cmd(struct dsi_panel *panel, u32 packet_count,
 		} else if (!strcmp(state, "dsi_hs_mode")) {
 			read_cmd->state = DSI_CMD_SET_STATE_HS;
 		} else {
-			pr_err("command state unrecognized-%s\n", state);
+			DSI_ERR("command state unrecognized-%s\n", state);
 			goto error_free_payloads;
 		}
 	}
@@ -1059,7 +1059,7 @@ int dsi_display_read_cmd(struct dsi_panel *panel, u32 packet_count,
 	rc = dsi_display_read_panel(display->panel, &read_config);
 
 	if (rc < 0) {
-		pr_err("[%s] read cmd failed on master,rc=%d\n",
+		DSI_ERR("[%s] read cmd failed on master,rc=%d\n",
 			   display->name, rc);
 		goto error_free_payloads;
 	}
@@ -1266,7 +1266,7 @@ int dsi_display_set_power(struct drm_connector *connector,
 	}
 
 	if (!connector || !connector->dev) {
-		pr_err("invalid connector/dev\n");
+		DSI_ERR("invalid connector/dev\n");
 		return -EINVAL;
 	} else {
 		dev = connector->dev;
@@ -1281,18 +1281,18 @@ int dsi_display_set_power(struct drm_connector *connector,
 	case SDE_MODE_DPMS_LP2:
 		rc = dsi_panel_set_lp2(display->panel);
 		break;
-	case SDE_MODE_DPMS_ON: // FIXME
+	case SDE_MODE_DPMS_ON:
 		if ((display->panel->power_mode == SDE_MODE_DPMS_LP1) ||
 			(display->panel->power_mode == SDE_MODE_DPMS_LP2)) {
 
 			if (dev->pre_state != SDE_MODE_DPMS_LP1 &&
-					dev->pre_state != SDE_MODE_DPMS_LP2) {
+					dev->pre_state != SDE_MODE_DPMS_LP2)
 			break;
-			}
+
 			drm_notifier_call_chain(DRM_EARLY_EVENT_BLANK, &g_notify_data);
 			rc = dsi_panel_set_nolp(display->panel);
 			drm_notifier_call_chain(DRM_EVENT_BLANK, &g_notify_data);
-		} // FIXME
+		}
 		break;
 	case SDE_MODE_DPMS_OFF:
 	default:
@@ -6133,7 +6133,7 @@ static struct mipi_dsi_host_ops dsi_host_ext_ops = {
 struct drm_panel *dsi_display_get_drm_panel(struct dsi_display * display)
 {
 	if (!display || !display->panel) {
-		pr_err("invalid param(s)\n");
+		DSI_ERR("invalid param(s)\n");
 		return NULL;
 	}
 
@@ -7794,7 +7794,7 @@ int dsi_display_pre_commit(void *display,
 	int rc = 0;
 
 	if (!display || !params) {
-		pr_err("Invalid params\n");
+		DSI_ERR("Invalid params\n");
 		return -EINVAL;
 	}
 
@@ -7802,7 +7802,7 @@ int dsi_display_pre_commit(void *display,
 		enable = (params->qsync_mode > 0) ? true : false;
 		rc = dsi_display_qsync(display, enable);
 		if (rc)
-			pr_err("%s failed to send qsync commands\n",
+			DSI_ERR("%s failed to send qsync commands\n",
 				__func__);
 		SDE_EVT32(params->qsync_mode, rc);
 	}

@@ -306,7 +306,7 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 			if (!c_bridge->display->panel->bl_config.ss_panel_id) {
 				rc = panel_disp_param_send(c_bridge->display, 0x40000000);
 				if (!rc)
-					pr_err("[%d] DSI disp param send failed, cmd = 0x40000000, rc=%d\n",
+					DSI_ERR("[%d] DSI disp param send failed, cmd = 0x40000000, rc=%d\n",
 						c_bridge->id, rc);
 				else
 					pr_info("[%d] ss_panel_id = %d\n", c_bridge->id,
@@ -372,14 +372,14 @@ static void dsi_bridge_disp_param_set(struct drm_bridge *bridge, int cmd)
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
 
 	if (!c_bridge) {
-		pr_err("Invalid params\n");
+		DSI_ERR("Invalid params\n");
 		return;
 	}
 
 	SDE_ATRACE_BEGIN("panel_disp_param_send");
 	rc = panel_disp_param_send(c_bridge->display, cmd);
 	if (rc) {
-		pr_err("[%d] DSI disp param send failed, cmd = %d, rc=%d\n",
+		DSI_ERR("[%d] DSI disp param send failed, cmd = %d, rc=%d\n",
 		       c_bridge->id, cmd, rc);
 	}
 	SDE_ATRACE_END("panel_disp_param_send");
@@ -393,7 +393,7 @@ static ssize_t dsi_bridge_disp_param_get(struct drm_bridge *bridge, char *buf)
 	ssize_t ret = 0;
 
 	if (!bridge) {
-		pr_err("Invalid params\n");
+		DSI_ERR("Invalid params\n");
 		return 0;
 	} else {
 		SDE_ATRACE_BEGIN("panel_disp_param_get");
@@ -421,7 +421,7 @@ static int dsi_bridge_get_panel_info(struct drm_bridge *bridge, char *buf)
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
 
 	if (!c_bridge) {
-		pr_err("Invalid params\n");
+		DSI_ERR("Invalid params\n");
 		return rc;
 	}
 
@@ -514,12 +514,12 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 	}
 	
 	if (c_bridge->display->is_prim_display && !atomic_read(&prim_panel_is_on)) {
-		pr_err("%s Already power off\n", __func__);
+		DSI_ERR("%s Already power off\n", __func__);
 		return;
 	}
 
 	if (dev->doze_state == DRM_BLANK_LP1 || dev->doze_state == DRM_BLANK_LP2) {
-		pr_err("%s doze state can't power off panel\n", __func__);
+		DSI_ERR("%s doze state can't power off panel\n", __func__);
 		event = DRM_BLANK_POWERDOWN;
 		drm_notifier_call_chain(DRM_EARLY_EVENT_BLANK, &g_notify_data);
 		drm_notifier_call_chain(DRM_EVENT_BLANK, &g_notify_data);
@@ -1324,7 +1324,8 @@ struct dsi_bridge *dsi_drm_bridge_init(struct dsi_display *display,
 	if (display->is_prim_display) {
 		gbridge = bridge;
 		atomic_set(&resume_pending, 0);
-		prim_panel_wakelock = wakeup_source_register(NULL, "prim_panel_wakelock");
+		prim_panel_wakelock = wakeup_source_create("prim_panel_wakelock");
+		wakeup_source_add(prim_panel_wakelock);
 		atomic_set(&prim_panel_is_on, false);
 		init_waitqueue_head(&resume_wait_q);
 		INIT_DELAYED_WORK(&prim_panel_work, prim_panel_off_delayed_work);
@@ -1345,7 +1346,8 @@ void dsi_drm_bridge_cleanup(struct dsi_bridge *bridge)
 	if (bridge == gbridge) {
 		atomic_set(&prim_panel_is_on, false);
 		cancel_delayed_work_sync(&prim_panel_work);
-		wakeup_source_unregister(prim_panel_wakelock);
+		wakeup_source_remove(prim_panel_wakelock);
+		wakeup_source_destroy(prim_panel_wakelock);
 	}
 
 	kfree(bridge);

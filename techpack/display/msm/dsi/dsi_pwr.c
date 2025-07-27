@@ -4,8 +4,6 @@
  * Copyright (C) 2019 XiaoMi, Inc.
  */
 
-// duckyduck: add changes if needed after testing, FIXME
-
 #include <linux/of.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
