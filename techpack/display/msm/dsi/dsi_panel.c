@@ -739,21 +739,7 @@ static int dsi_panel_wled_register(struct dsi_panel *panel,
 	bl->raw_bd = bd;
 	return 0;
 }
-/*
-static int dsi_panel_dcs_set_display_brightness_c2(struct mipi_dsi_device *dsi,
-			u32 bl_lvl)
-{
-	u16 brightness = (u16)bl_lvl;
-	u8 first_byte = brightness & 0xff;
-	u8 second_byte = brightness >> 8;
-	u8 payload[8] = {second_byte, first_byte,
-		second_byte, first_byte,
-		second_byte, first_byte,
-		second_byte, first_byte};
 
-	return mipi_dsi_dcs_write(dsi, 0xC2, payload, sizeof(payload));
-}
-*/
 enum {
 	DDIC_VER_0,
 	DDIC_VER_1 = 0x01,
@@ -790,7 +776,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 {
 	int rc = 0;
 	struct mipi_dsi_device *dsi;
-	struct dsi_backlight_config *bl;
 
 	if (!panel || (bl_lvl > 0xffff)) {
 		DSI_ERR("invalid params\n");
@@ -803,15 +788,9 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	}
 
 	dsi = &panel->mipi_device;
-	bl = &panel->bl_config;
 
 	if (panel->bl_config.bl_inverted_dbv)
 		bl_lvl = (((bl_lvl & 0xff) << 8) | (bl_lvl >> 8));
-
-	if (panel->bl_config.bl_dcs_subtype == 0xc2)
-		rc = dsi_panel_dcs_set_display_brightness_c2(dsi, bl_lvl);
-	else
-		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 
 	if (panel->bl_config.dcs_type_ss) {
 		if (panel->bl_config.ss_panel_id == DDIC_VER_1)
