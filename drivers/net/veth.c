@@ -300,16 +300,21 @@ static int veth_xdp_xmit(struct net_device *dev, int n,
 {
 	struct veth_priv *rcv_priv, *priv = netdev_priv(dev);
 	struct net_device *rcv;
+	int i, ret, drops = n;
 	unsigned int max_len;
 	struct veth_rq *rq;
-	int i, drops = 0;
 
-	if (unlikely(flags & ~XDP_XMIT_FLAGS_MASK))
-		return -EINVAL;
+	rcu_read_lock();
+	if (unlikely(flags & ~XDP_XMIT_FLAGS_MASK)) {
+		ret = -EINVAL;
+		goto drop;
+	}
 
 	rcv = rcu_dereference(priv->peer);
-	if (unlikely(!rcv))
-		return -ENXIO;
+	if (unlikely(!rcv)) {
+		ret = -ENXIO;
+		goto drop;
+	}
 
 	rcv_priv = netdev_priv(rcv);
 	rq = &rcv_priv->rq[veth_select_rxq(rcv)];
@@ -317,9 +322,12 @@ static int veth_xdp_xmit(struct net_device *dev, int n,
 	 * side. This means an XDP program is loaded on the peer and the peer
 	 * device is up.
 	 */
-	if (!rcu_access_pointer(rq->xdp_prog))
-		return -ENXIO;
+	if (!rcu_access_pointer(rq->xdp_prog)) {
+		ret = -ENXIO;
+		goto drop;
+	}
 
+	drops = 0;
 	max_len = rcv->mtu + rcv->hard_header_len + VLAN_HLEN;
 
 	spin_lock(&rq->xdp_ring.producer_lock);
@@ -338,7 +346,17 @@ static int veth_xdp_xmit(struct net_device *dev, int n,
 	if (flags & XDP_XMIT_FLUSH)
 		__veth_xdp_flush(rq);
 
-	return n - drops;
+	if (likely(!drops)) {
+		rcu_read_unlock();
+		return n;
+	}
+
+	ret = n - drops;
+drop:
+	rcu_read_unlock();
+	atomic64_add(drops, &priv->dropped);
+
+	return ret;
 }
 
 static void veth_xdp_flush(struct net_device *dev)
@@ -365,7 +383,7 @@ out:
 
 static int veth_xdp_tx(struct net_device *dev, struct xdp_buff *xdp)
 {
-	struct xdp_frame *frame = convert_to_xdp_frame(xdp);
+	struct xdp_frame *frame = xdp_convert_buff_to_frame(xdp);
 
 	if (unlikely(!frame))
 		return -EOVERFLOW;
@@ -393,10 +411,7 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 		struct xdp_buff xdp;
 		u32 act;
 
-		xdp.data_hard_start = hard_start;
-		xdp.data = frame->data;
-		xdp.data_end = frame->data + frame->len;
-		xdp.data_meta = frame->data - frame->metasize;
+		xdp_convert_frame_to_buff(frame, &xdp);
 		xdp.rxq = &rq->xdp_rxq;
 
 		act = bpf_prog_run_xdp(xdp_prog, &xdp);
@@ -636,7 +651,7 @@ static int veth_poll(struct napi_struct *napi, int budget)
 	if (xdp_xmit & VETH_XDP_TX)
 		veth_xdp_flush(rq->dev);
 	if (xdp_xmit & VETH_XDP_REDIR)
-		xdp_do_flush_map();
+		xdp_do_flush();
 	xdp_clear_return_frame_no_direct();
 
 	return done;

@@ -521,6 +521,48 @@ struct dst_entry *sk_dst_check(struct sock *sk, u32 cookie)
 }
 EXPORT_SYMBOL(sk_dst_check);
 
+static int sock_bindtoindex_locked(struct sock *sk, int ifindex)
+{
+	int ret = -ENOPROTOOPT;
+#ifdef CONFIG_NETDEVICES
+	struct net *net = sock_net(sk);
+
+	/* Sorry... */
+	ret = -EPERM;
+	if (!ns_capable(net->user_ns, CAP_NET_RAW))
+		goto out;
+
+	ret = -EINVAL;
+	if (ifindex < 0)
+		goto out;
+
+	sk->sk_bound_dev_if = ifindex;
+	if (sk->sk_prot->rehash)
+		sk->sk_prot->rehash(sk);
+	sk_dst_reset(sk);
+
+	ret = 0;
+
+out:
+#endif
+
+	return ret;
+}
+
+int sock_bindtoindex(struct sock *sk, int ifindex, bool lock_sk)
+{
+	int ret;
+
+	if (lock_sk)
+		lock_sock(sk);
+	ret = sock_bindtoindex_locked(sk, ifindex);
+	if (lock_sk)
+		release_sock(sk);
+
+	return ret;
+}
+EXPORT_SYMBOL(sock_bindtoindex);
+
 static int sock_setbindtodevice(struct sock *sk, char __user *optval,
 				int optlen)
 {
@@ -566,13 +608,7 @@ static int sock_setbindtodevice(struct sock *sk, char __user *optval,
 			goto out;
 	}
 
-	lock_sock(sk);
-	sk->sk_bound_dev_if = index;
-	sk_dst_reset(sk);
-	release_sock(sk);
-
-	ret = 0;
-
+	return sock_bindtoindex(sk, index, true);
 out:
 #endif
 
@@ -617,14 +653,6 @@ out:
 #endif
 
 	return ret;
-}
-
-static inline void sock_valbool_flag(struct sock *sk, int bit, int valbool)
-{
-	if (valbool)
-		sock_set_flag(sk, bit);
-	else
-		sock_reset_flag(sk, bit);
 }
 
 bool sk_mc_loop(struct sock *sk)
@@ -714,7 +742,8 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 		val = min_t(u32, val, sysctl_wmem_max);
 set_sndbuf:
 		sk->sk_userlocks |= SOCK_SNDBUF_LOCK;
-		sk->sk_sndbuf = max_t(int, val * 2, SOCK_MIN_SNDBUF);
+		WRITE_ONCE(sk->sk_sndbuf,
+			   max_t(int, val * 2, SOCK_MIN_SNDBUF));
 		/* Wake up sending tasks if we upped the value. */
 		sk->sk_write_space(sk);
 		break;
@@ -750,7 +779,8 @@ set_rcvbuf:
 		 * returning the value we actually used in getsockopt
 		 * is the most desirable behavior.
 		 */
-		sk->sk_rcvbuf = max_t(int, val * 2, SOCK_MIN_RCVBUF);
+		WRITE_ONCE(sk->sk_rcvbuf,
+			   max_t(int, val * 2, SOCK_MIN_RCVBUF));
 		break;
 
 	case SO_RCVBUFFORCE:
@@ -872,7 +902,7 @@ set_rcvbuf:
 		if (sock->ops->set_rcvlowat)
 			ret = sock->ops->set_rcvlowat(sk, val);
 		else
-			sk->sk_rcvlowat = val ? : 1;
+			WRITE_ONCE(sk->sk_rcvlowat, val ? : 1);
 		break;
 
 	case SO_RCVTIMEO:
@@ -997,15 +1027,23 @@ set_rcvbuf:
 #endif
 
 	case SO_MAX_PACING_RATE:
-		if (val != ~0U)
+		{
+		unsigned long ulval = (val == ~0U) ? ~0UL : (unsigned int)val;
+
+		if (sizeof(ulval) != sizeof(val) &&
+		    optlen >= sizeof(ulval) &&
+		    get_user(ulval, (unsigned long __user *)optval)) {
+			ret = -EFAULT;
+			break;
+		}
+		if (ulval != ~0UL)
 			cmpxchg(&sk->sk_pacing_status,
 				SK_PACING_NONE,
 				SK_PACING_NEEDED);
-		sk->sk_max_pacing_rate = val;
-		sk->sk_pacing_rate = min(sk->sk_pacing_rate,
-					 sk->sk_max_pacing_rate);
+		sk->sk_max_pacing_rate = ulval;
+		sk->sk_pacing_rate = min(sk->sk_pacing_rate, ulval);
 		break;
-
+		}
 	case SO_INCOMING_CPU:
 		WRITE_ONCE(sk->sk_incoming_cpu, val);
 		break;
@@ -1048,6 +1086,10 @@ set_rcvbuf:
 			sk->sk_txtime_report_errors =
 				!!(sk_txtime.flags & SOF_TXTIME_REPORT_ERRORS);
 		}
+		break;
+
+	case SO_BINDTOIFINDEX:
+		ret = sock_bindtoindex_locked(sk, val);
 		break;
 
 	default:
@@ -1356,7 +1398,8 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 #endif
 
 	case SO_MAX_PACING_RATE:
-		v.val = sk->sk_max_pacing_rate;
+		/* 32bit version */
+		v.val = min_t(unsigned long, sk->sk_max_pacing_rate, ~0U);
 		break;
 
 	case SO_INCOMING_CPU:
@@ -1405,6 +1448,10 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 				  SOF_TXTIME_DEADLINE_MODE : 0;
 		v.txtime.flags |= sk->sk_txtime_report_errors ?
 				  SOF_TXTIME_REPORT_ERRORS : 0;
+		break;
+
+	case SO_BINDTOIFINDEX:
+		v.val = sk->sk_bound_dev_if;
 		break;
 
 	default:
@@ -1744,6 +1791,18 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 		}
 		RCU_INIT_POINTER(newsk->sk_reuseport_cb, NULL);
 
+		if (bpf_sk_storage_clone(sk, newsk)) {
+			sk_free_unlock_clone(newsk);
+			newsk = NULL;
+			goto out;
+		}
+
+		/* Clear sk_user_data if parent had the pointer tagged
+		 * as not suitable for copying when cloning.
+		 */
+		if (sk_user_data_is_nocopy(newsk))
+			RCU_INIT_POINTER(newsk->sk_user_data, NULL);
+
 		newsk->sk_err	   = 0;
 		newsk->sk_err_soft = 0;
 		newsk->sk_priority = 0;
@@ -1934,6 +1993,18 @@ void sock_efree(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(sock_efree);
 
+/* Buffer destructor for prefetch/receive path where reference count may
+ * not be held, e.g. for listen sockets.
+ */
+#ifdef CONFIG_INET
+void sock_pfree(struct sk_buff *skb)
+{
+	if (sk_is_refcounted(skb->sk))
+		sock_gen_put(skb->sk);
+}
+EXPORT_SYMBOL(sock_pfree);
+#endif /* CONFIG_INET */
+
 kuid_t sock_i_uid(struct sock *sk)
 {
 	kuid_t uid;
@@ -1973,8 +2044,10 @@ EXPORT_SYMBOL(sock_i_ino);
 struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force,
 			     gfp_t priority)
 {
-	if (force || refcount_read(&sk->sk_wmem_alloc) < sk->sk_sndbuf) {
+	if (force ||
+	    refcount_read(&sk->sk_wmem_alloc) < READ_ONCE(sk->sk_sndbuf)) {
 		struct sk_buff *skb = alloc_skb(size, priority);
+
 		if (skb) {
 			skb_set_owner_w(skb, sk);
 			return skb;
@@ -2075,7 +2148,7 @@ static long sock_wait_for_wmem(struct sock *sk, long timeo)
 			break;
 		set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
-		if (refcount_read(&sk->sk_wmem_alloc) < sk->sk_sndbuf)
+		if (refcount_read(&sk->sk_wmem_alloc) < READ_ONCE(sk->sk_sndbuf))
 			break;
 		if (READ_ONCE(sk->sk_shutdown) & SEND_SHUTDOWN)
 			break;
@@ -2110,7 +2183,7 @@ struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
 		if (READ_ONCE(sk->sk_shutdown) & SEND_SHUTDOWN)
 			goto failure;
 
-		if (sk_wmem_alloc_get(sk) < sk->sk_sndbuf)
+		if (sk_wmem_alloc_get(sk) < READ_ONCE(sk->sk_sndbuf))
 			break;
 
 		sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);
@@ -2277,67 +2350,6 @@ bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
 	return false;
 }
 EXPORT_SYMBOL(sk_page_frag_refill);
-
-int sk_alloc_sg(struct sock *sk, int len, struct scatterlist *sg,
-		int sg_start, int *sg_curr_index, unsigned int *sg_curr_size,
-		int first_coalesce)
-{
-	int sg_curr = *sg_curr_index, use = 0, rc = 0;
-	unsigned int size = *sg_curr_size;
-	struct page_frag *pfrag;
-	struct scatterlist *sge;
-
-	len -= size;
-	pfrag = sk_page_frag(sk);
-
-	while (len > 0) {
-		unsigned int orig_offset;
-
-		if (!sk_page_frag_refill(sk, pfrag)) {
-			rc = -ENOMEM;
-			goto out;
-		}
-
-		use = min_t(int, len, pfrag->size - pfrag->offset);
-
-		if (!sk_wmem_schedule(sk, use)) {
-			rc = -ENOMEM;
-			goto out;
-		}
-
-		sk_mem_charge(sk, use);
-		size += use;
-		orig_offset = pfrag->offset;
-		pfrag->offset += use;
-
-		sge = sg + sg_curr - 1;
-		if (sg_curr > first_coalesce && sg_page(sge) == pfrag->page &&
-		    sge->offset + sge->length == orig_offset) {
-			sge->length += use;
-		} else {
-			sge = sg + sg_curr;
-			sg_unmark_end(sge);
-			sg_set_page(sge, pfrag->page, use, orig_offset);
-			get_page(pfrag->page);
-			sg_curr++;
-
-			if (sg_curr == MAX_SKB_FRAGS)
-				sg_curr = 0;
-
-			if (sg_curr == sg_start) {
-				rc = -ENOSPC;
-				break;
-			}
-		}
-
-		len -= use;
-	}
-out:
-	*sg_curr_size = size;
-	*sg_curr_index = sg_curr;
-	return rc;
-}
-EXPORT_SYMBOL(sk_alloc_sg);
 
 static void __lock_sock(struct sock *sk)
 	__releases(&sk->sk_lock.slock)
@@ -2768,7 +2780,7 @@ static void sock_def_write_space(struct sock *sk)
 	/* Do not wake up a writer until he can make "significant"
 	 * progress.  --DaveM
 	 */
-	if ((refcount_read(&sk->sk_wmem_alloc) << 1) <= sk->sk_sndbuf) {
+	if ((refcount_read(&sk->sk_wmem_alloc) << 1) <= READ_ONCE(sk->sk_sndbuf)) {
 		wq = rcu_dereference(sk->sk_wq);
 		if (skwq_has_sleeper(wq))
 			wake_up_interruptible_sync_poll(&wq->wait, EPOLLOUT |
@@ -2882,8 +2894,8 @@ void sock_init_data_uid(struct socket *sock, struct sock *sk, kuid_t uid)
 	sk->sk_ll_usec		=	READ_ONCE(sysctl_net_busy_read);
 #endif
 
-	sk->sk_max_pacing_rate = ~0U;
-	sk->sk_pacing_rate = ~0U;
+	sk->sk_max_pacing_rate = ~0UL;
+	sk->sk_pacing_rate = ~0UL;
 	sk->sk_pacing_shift = 10;
 	sk->sk_incoming_cpu = -1;
 
@@ -3181,9 +3193,9 @@ void sk_get_meminfo(const struct sock *sk, u32 *mem)
 	memset(mem, 0, sizeof(*mem) * SK_MEMINFO_VARS);
 
 	mem[SK_MEMINFO_RMEM_ALLOC] = sk_rmem_alloc_get(sk);
-	mem[SK_MEMINFO_RCVBUF] = sk->sk_rcvbuf;
+	mem[SK_MEMINFO_RCVBUF] = READ_ONCE(sk->sk_rcvbuf);
 	mem[SK_MEMINFO_WMEM_ALLOC] = sk_wmem_alloc_get(sk);
-	mem[SK_MEMINFO_SNDBUF] = sk->sk_sndbuf;
+	mem[SK_MEMINFO_SNDBUF] = READ_ONCE(sk->sk_sndbuf);
 	mem[SK_MEMINFO_FWD_ALLOC] = sk->sk_forward_alloc;
 	mem[SK_MEMINFO_WMEM_QUEUED] = sk->sk_wmem_queued;
 	mem[SK_MEMINFO_OPTMEM] = atomic_read(&sk->sk_omem_alloc);
