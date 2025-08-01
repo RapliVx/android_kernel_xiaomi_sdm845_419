@@ -22,7 +22,6 @@
 #include <net/netlink.h>
 #include <net/genetlink.h>
 #include <linux/suspend.h>
-#include <linux/cpu_cooling.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/thermal.h>
@@ -39,7 +38,6 @@ MODULE_DESCRIPTION("Generic thermal management sysfs support");
 MODULE_LICENSE("GPL v2");
 
 #define THERMAL_MAX_ACTIVE	16
-#define CPU_LIMITS_PARAM_NUM	2
 
 static DEFINE_IDA(thermal_tz_ida);
 static DEFINE_IDA(thermal_cdev_ida);
@@ -1773,33 +1771,6 @@ thermal_temp_state_store(struct device *dev,
 static DEVICE_ATTR(temp_state, 0664,
 		   thermal_temp_state_show, thermal_temp_state_store);
 
-static ssize_t
-cpu_limits_show(struct device *dev,
-				      struct device_attribute *attr, char *buf)
-{
-	return 0;
-}
-
-static ssize_t
-cpu_limits_store(struct device *dev,
-				      struct device_attribute *attr, const char *buf, size_t len)
-{
-	unsigned int cpu;
-	unsigned int max;
-
-	if (sscanf(buf, "cpu%u %u", &cpu, &max) != CPU_LIMITS_PARAM_NUM) {
-		pr_err("input param error, can not prase param\n");
-		return -EINVAL;
-	}
-
-	cpu_limits_set_level(cpu, max);
-
-	return len;
-}
-
-static DEVICE_ATTR(cpu_limits, 0664,
-		   cpu_limits_show, cpu_limits_store);
-
 static int create_thermal_message_node(void) {
 	int ret = 0;
 
@@ -1827,17 +1798,12 @@ static int create_thermal_message_node(void) {
 		ret = sysfs_create_file(&thermal_message_dev.kobj, &dev_attr_temp_state.attr);
 		if (ret < 0)
 			pr_warn("Thermal: create temp state node failed\n");
-
-		ret = sysfs_create_file(&thermal_message_dev.kobj, &dev_attr_cpu_limits.attr);
-		if (ret < 0)
-			pr_warn("Thermal: create cpu limits node failed\n");
 	}
 
 	return ret;
 }
 
 static void destroy_thermal_message_node(void) {
-	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_cpu_limits.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_temp_state.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_sconfig.attr);
 	sysfs_remove_file(&thermal_message_dev.kobj, &dev_attr_boost.attr);
