@@ -823,8 +823,10 @@ int32_t cam_sensor_update_power_settings(void *cmd_buf,
 	return rc;
 free_power_down_settings:
 	kfree(power_info->power_down_setting);
-free_power_settings:
 	kfree(power_info->power_setting);
+free_power_settings:
+	kfree(pwr_cmd);
+	pwr_cmd = NULL;
 	return rc;
 }
 
