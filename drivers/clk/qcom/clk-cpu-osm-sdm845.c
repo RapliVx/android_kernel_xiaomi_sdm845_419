@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
+#include <linux/energy_model.h>
 #include <dt-bindings/clock/qcom,cpucc-sdm845.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
 
@@ -728,9 +729,11 @@ static unsigned int osm_cpufreq_get(unsigned int cpu)
 
 static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
+	struct em_data_callback em_cb = EM_DATA_CB(of_dev_pm_opp_get_cpu_power);
 	struct cpufreq_frequency_table *table;
 	struct clk_osm *c, *parent;
 	struct clk_hw *p_hw;
+	int ret;
 	unsigned int i, prev_cc = 0;
 	unsigned int xo_kHz;
 
@@ -801,6 +804,9 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->driver_data = c;
 	policy->dvfs_possible_from_any_cpu = true;
 	cpumask_copy(policy->cpus, &c->related_cpus);
+
+	em_register_perf_domain(policy->cpus, ret, &em_cb);
+
 	return 0;
 }
 
