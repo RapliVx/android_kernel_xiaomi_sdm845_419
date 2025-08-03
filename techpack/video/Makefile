@@ -27,12 +27,4 @@ ifeq ($(CONFIG_ARCH_BENGAL), y)
 LINUXINCLUDE    += -include $(srctree)/techpack/video/config/bengalvidconf.h
 endif
 
-ifeq ($(CONFIG_ARCH_SDM845), y)
-include $(srctree)/techpack/video/config/sdm845vid.conf
-endif
-
-ifeq ($(CONFIG_ARCH_SDM845), y)
-LINUXINCLUDE    += -include $(srctree)/techpack/video/config/sdm845vidconf.h
-endif
-
 obj-y +=msm/
