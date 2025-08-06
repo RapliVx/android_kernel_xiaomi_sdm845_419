@@ -806,10 +806,10 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	table[i].frequency = CPUFREQ_TABLE_END;
 
 	policy->freq_table = table;
-	policy->driver_data = c;
 	policy->dvfs_possible_from_any_cpu = true;
-	cpumask_copy(policy->cpus, &c->related_cpus);
+	policy->driver_data = c;
 
+	cpumask_copy(policy->cpus, &c->related_cpus);
 	em_register_perf_domain(policy->cpus, ret, &em_cb);
 
 	return 0;
