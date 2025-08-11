@@ -4525,6 +4525,7 @@ int msm_comm_qbufs_batch(struct msm_vidc_inst *inst,
 {
 	int rc = 0;
 	struct msm_vidc_buffer *buf;
+	int num_buffers_queued = 0;
 
 	mutex_lock(&inst->registeredbufs.lock);
 	list_for_each_entry(buf, &inst->registeredbufs.list, list) {
@@ -4546,10 +4547,13 @@ int msm_comm_qbufs_batch(struct msm_vidc_inst *inst,
 				__func__, rc);
 			break;
 		}
+		num_buffers_queued++;
 loop_end:
-		/* Queue pending buffers till the current buffer only */
-		if (buf == mbuf)
+		/* Queue pending buffers till batch size */
+		if (num_buffers_queued == inst->batch.size) {
+			dprintk(VIDC_ERR, "%s: Queue buffers till batch size\n");
 			break;
+		}
 	}
 	mutex_unlock(&inst->registeredbufs.lock);
 
