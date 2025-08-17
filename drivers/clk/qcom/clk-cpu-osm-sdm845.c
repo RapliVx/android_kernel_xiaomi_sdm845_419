@@ -25,7 +25,6 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
-#include <linux/cpu_cooling.h>
 
 #include <dt-bindings/clock/qcom,cpucc-sdm845.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
@@ -820,35 +819,6 @@ static struct freq_attr *osm_cpufreq_attr[] = {
 	NULL
 };
 
-static void osm_cpufreq_ready(struct cpufreq_policy *policy)
-{
-	static struct thermal_cooling_device *cdev[NR_CPUS];
-	struct device_node *np;
-	unsigned int cpu = policy->cpu;
-
-	if (cdev[cpu])
-		return;
-
-	np = of_cpu_device_node_get(cpu);
-	if (WARN_ON(!np))
-		return;
-
-	/*
-	 * For now, just loading the cooling device;
-	 * thermal DT code takes care of matching them.
-	 */
-	if (of_find_property(np, "#cooling-cells", NULL)) {
-		cdev[cpu] = of_cpufreq_cooling_register(policy);
-		if (IS_ERR(cdev[cpu])) {
-			pr_err("running osm-cpufreq for CPU%d without cooling dev: %ld\n",
-			       cpu, PTR_ERR(cdev[cpu]));
-			cdev[cpu] = NULL;
-		}
-	}
-
-	of_node_put(np);
-}
-
 static struct cpufreq_driver qcom_osm_cpufreq_driver = {
 	.flags		= CPUFREQ_STICKY | CPUFREQ_NEED_INITIAL_FREQ_CHECK |
 			  CPUFREQ_HAVE_GOVERNOR_PER_POLICY,
@@ -860,7 +830,6 @@ static struct cpufreq_driver qcom_osm_cpufreq_driver = {
 	.name		= "osm-cpufreq",
 	.attr		= osm_cpufreq_attr,
 	.boost_enabled	= true,
-	.ready		= osm_cpufreq_ready,
 };
 
 static u32 find_voltage(struct clk_osm *c, unsigned long rate)
