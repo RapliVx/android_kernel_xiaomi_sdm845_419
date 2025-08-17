@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
+#include <linux/cpu_cooling.h>
 
 #include <dt-bindings/clock/qcom,cpucc-sdm845.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
@@ -79,6 +80,7 @@ struct clk_osm {
 	struct osm_entry osm_table[OSM_TABLE_SIZE];
 	struct dentry *debugfs;
 	struct cpufreq_frequency_table *table;
+	struct thermal_cooling_device *cdev;
 	void __iomem *vbase;
 	phys_addr_t pbase;
 	spinlock_t lock;
@@ -813,6 +815,9 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 
 static int osm_cpufreq_cpu_exit(struct cpufreq_policy *policy)
 {
+	struct clk_osm *data = policy->driver_data;
+
+	cpufreq_cooling_unregister(data->cdev);
 	kfree(policy->freq_table);
 	policy->freq_table = NULL;
 	return 0;
@@ -823,6 +828,13 @@ static struct freq_attr *osm_cpufreq_attr[] = {
 	&cpufreq_freq_attr_scaling_boost_freqs,
 	NULL
 };
+
+static void osm_cpufreq_ready(struct cpufreq_policy *policy)
+{
+	struct clk_osm *osm = policy->driver_data;
+
+	osm->cdev = of_cpufreq_cooling_register(policy);
+}
 
 static struct cpufreq_driver qcom_osm_cpufreq_driver = {
 	.flags		= CPUFREQ_STICKY | CPUFREQ_NEED_INITIAL_FREQ_CHECK |
@@ -836,6 +848,7 @@ static struct cpufreq_driver qcom_osm_cpufreq_driver = {
 	.name		= "osm-cpufreq",
 	.attr		= osm_cpufreq_attr,
 	.boost_enabled	= true,
+	.ready		= osm_cpufreq_ready,
 };
 
 static u32 find_voltage(struct clk_osm *c, unsigned long rate)
