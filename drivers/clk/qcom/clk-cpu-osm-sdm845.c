@@ -798,8 +798,8 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	c->table[i].frequency = CPUFREQ_TABLE_END;
 
 	policy->freq_table = c->table;
-	policy->dvfs_possible_from_any_cpu = true;
 	policy->driver_data = c;
+	policy->dvfs_possible_from_any_cpu = true;
 
 	cpumask_copy(policy->cpus, &c->related_cpus);
 
