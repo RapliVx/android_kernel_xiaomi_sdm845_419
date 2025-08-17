@@ -80,6 +80,7 @@ struct clk_osm {
 	struct clk_hw hw;
 	struct osm_entry osm_table[OSM_TABLE_SIZE];
 	struct dentry *debugfs;
+	struct cpufreq_frequency_table *table;
 	void __iomem *vbase;
 	phys_addr_t pbase;
 	spinlock_t lock;
@@ -735,12 +736,10 @@ static unsigned int osm_cpufreq_get(unsigned int cpu)
 static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
 	struct em_data_callback em_cb = EM_DATA_CB(of_dev_pm_opp_get_cpu_power);
-	struct cpufreq_frequency_table *table;
 	struct clk_osm *c, *parent;
 	struct clk_hw *p_hw;
 	int ret;
-	unsigned int i, prev_cc = 0;
-	unsigned int xo_kHz;
+	unsigned int i;
 
 	c = osm_configure_policy(policy);
 	if (!c) {
@@ -762,10 +761,9 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		pr_err("no xo clock for CPU%d\n", policy->cpu);
 		return -ENODEV;
 	}
-	xo_kHz = clk_hw_get_rate(p_hw) / 1000;
 
-	table = kcalloc(OSM_TABLE_SIZE + 1, sizeof(*table), GFP_KERNEL);
-	if (!table)
+	c->table = kcalloc(OSM_TABLE_SIZE + 1, sizeof(*c->table), GFP_KERNEL);
+	if (!c->table)
 		return -ENOMEM;
 
 	for (i = 0; i < OSM_TABLE_SIZE; i++) {
@@ -778,21 +776,20 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		core_count = CORE_COUNT_VAL(data);
 
 		if (!src)
-			table[i].frequency = OSM_INIT_RATE / 1000;
+			c->table[i].frequency = OSM_INIT_RATE / 1000;
 		else
-			table[i].frequency = xo_kHz * lval;
-		table[i].driver_data = table[i].frequency;
+			c->table[i].frequency = (XO_RATE * lval) / 1000;
+		c->table[i].driver_data = c->table[i].frequency;
 
 		if (core_count != parent->max_core_count)
-			table[i].frequency = CPUFREQ_ENTRY_INVALID;
+			c->table[i].frequency = CPUFREQ_ENTRY_INVALID;
 
 		/*
 		 * Two of the same frequencies with the same core counts means
 		 * end of table.
 		 */
-		if (i > 0 && table[i - 1].driver_data == table[i].driver_data
-					&& prev_cc == core_count) {
-			struct cpufreq_frequency_table *prev = &table[i - 1];
+		if (i > 0 && c->table[i - 1].driver_data == c->table[i].driver_data) {
+			struct cpufreq_frequency_table *prev = &c->table[i - 1];
 
 			if (prev->frequency == CPUFREQ_ENTRY_INVALID) {
 				prev->flags = CPUFREQ_BOOST_FREQ;
@@ -801,11 +798,10 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 
 			break;
 		}
-		prev_cc = core_count;
 	}
-	table[i].frequency = CPUFREQ_TABLE_END;
+	c->table[i].frequency = CPUFREQ_TABLE_END;
 
-	policy->freq_table = table;
+	policy->freq_table = c->table;
 	policy->dvfs_possible_from_any_cpu = true;
 	policy->driver_data = c;
 
