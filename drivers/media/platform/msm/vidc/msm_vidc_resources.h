@@ -16,7 +16,7 @@
 #define __MSM_VIDC_RESOURCES_H__
 
 #include <linux/platform_device.h>
-#include <media/msm_vidc.h>
+#include "msm_vidc.h"
 #include <linux/soc/qcom/llcc-qcom.h>
 
 #define MAX_BUFFER_TYPES 32

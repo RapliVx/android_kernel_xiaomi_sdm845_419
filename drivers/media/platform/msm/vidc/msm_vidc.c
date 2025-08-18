@@ -14,7 +14,7 @@
 #include <linux/dma-direction.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <media/msm_vidc.h>
+#include "msm_vidc.h"
 #include "msm_vidc_internal.h"
 #include "msm_vidc_debug.h"
 #include "msm_vdec.h"
@@ -517,7 +517,7 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 		b->m.planes[i].m.fd = b->m.planes[i].reserved[0];
 		b->m.planes[i].data_offset = b->m.planes[i].reserved[1];
 	}
-
+	
 	/* Compression ratio is valid only for Encoder YUV buffers. */
 	if (inst->session_type == MSM_VIDC_ENCODER &&
 			b->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
@@ -1860,8 +1860,6 @@ fail_bufq_output:
 	vb2_queue_release(&inst->bufq[CAPTURE_PORT].vb2_bufq);
 fail_bufq_capture:
 	msm_comm_ctrl_deinit(inst);
-//	msm_smem_delete_client(inst->mem_client);
-//fail_mem_client://
 	mutex_destroy(&inst->sync_lock);
 	mutex_destroy(&inst->bufq[CAPTURE_PORT].lock);
 	mutex_destroy(&inst->bufq[OUTPUT_PORT].lock);
@@ -2041,7 +2039,6 @@ int msm_vidc_close(void *instance)
 	}
 
 	msm_comm_session_clean(inst);
-//	msm_smem_delete_client(inst->mem_client);
 
 	kref_put(&inst->kref, close_helper);
 	return 0;

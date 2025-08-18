@@ -20,7 +20,7 @@
 #include <linux/ion_kernel.h>
 #include <linux/slab.h>
 #include <linux/types.h>
-#include "media/msm_vidc.h"
+#include "msm_vidc.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_resources.h"
 
@@ -144,7 +144,7 @@ static int msm_dma_put_device_address(u32 flags,
 	}
 
 	if (!mapping_info->dev || !mapping_info->table ||
-		!mapping_info->buf || !mapping_info->attach {
+		!mapping_info->buf || !mapping_info->attach) {
 		dprintk(VIDC_WARN, "Invalid params\n");
 		return -EINVAL;
 	}
