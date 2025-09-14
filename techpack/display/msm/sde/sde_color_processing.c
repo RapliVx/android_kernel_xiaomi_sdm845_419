@@ -2146,7 +2146,15 @@ void sde_cp_crtc_suspend(struct drm_crtc *crtc)
 
 void sde_cp_crtc_resume(struct drm_crtc *crtc)
 {
-	/* placeholder for operations needed during resume */
+	struct sde_crtc *sde_crtc;
+
+	sde_crtc = to_sde_crtc(crtc);
+	if (!sde_crtc) {
+		DRM_ERROR("invalid sde_crtc %pK\n", sde_crtc);
+		return;
+	}
+
+	sde_cp_ad_set_prop(sde_crtc, AD_RESUME);
 }
 
 void sde_cp_crtc_clear(struct drm_crtc *crtc)
@@ -2396,20 +2404,9 @@ static void dspp_ltm_install_property(struct drm_crtc *crtc)
 	char feature_name[256];
 	struct sde_kms *kms = NULL;
 	struct sde_mdss_cfg *catalog = NULL;
-	u32 version = 0, ltm_sw_fuse = 0;
+	u32 version;
 
 	kms = get_kms(crtc);
-	if (!kms || !kms->hw_sw_fuse) {
-		DRM_ERROR("!kms = %d\n", !kms);
-		return;
-	}
-
-	ltm_sw_fuse = sde_hw_get_ltm_sw_fuse_value(kms->hw_sw_fuse);
-	DRM_DEBUG_DRIVER("ltm_sw_fuse value: 0x%x\n", ltm_sw_fuse);
-	if (ltm_sw_fuse != SW_FUSE_ENABLE) {
-		pr_info("ltm_sw_fuse is not enabled: 0x%x\n", ltm_sw_fuse);
-	}
-
 	catalog = kms->catalog;
 	version = catalog->dspp[0].sblk->ltm.version >> 16;
 	snprintf(feature_name, ARRAY_SIZE(feature_name), "%s%d",

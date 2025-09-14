@@ -69,6 +69,7 @@
 #define IDLE_TIMEOUT_MS_DEFAULT		100
 
 static DEFINE_MUTEX(msm_release_lock);
+
 atomic_t resume_pending;
 wait_queue_head_t resume_wait_q;
 
@@ -717,7 +718,7 @@ static ssize_t idle_encoder_mask_store(struct device *device,
 	int rc;
 	unsigned long flags;
 
-	rc = kstrtouint(buf, 0, &encoder_mask);
+	rc = kstrtouint(buf, 10, &encoder_mask);
 	if (rc)
 		return rc;
 
@@ -2001,7 +2002,6 @@ static int compare_of(struct device *dev, void *data)
 {
 	return dev->of_node == data;
 }
-
 
 /*
  * Identify what components need to be added by parsing what remote-endpoints
